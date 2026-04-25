@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="pw-hero rounded-4 p-4 p-md-5 mb-4">
+  <div class="row align-items-center g-4">
+    <div class="col-lg-7">
+      <h1 class="display-5 fw-bold mb-4">Цены на продукты в разных странах</h1>
+      <form action="/search" method="get" class="row g-2">
+        <div class="col-md-7">
+          <input name="q" type="search" class="form-control form-control-lg" placeholder="Например: хлеб, молоко, яйца..." autofocus>
+        </div>
+        <div class="col-md-3">
+          <select name="country_id" class="form-select form-select-lg">
+            <option value="">Все страны</option>
+            {% for c in countries %}<option value="{{ c.id }}">{{ c.flag }} {{ c.name_ru }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2 d-grid">
+          <button class="btn btn-primary btn-lg"><i class="bi bi-search"></i> Найти</button>
+        </div>
+      </form>
+    </div>
+    <div class="col-lg-5 text-center">
+      <div class="pw-hero-stats">
+        <div class="row g-3 text-center">
+          <div class="col-6"><div class="pw-stat"><div class="num">{{ products_total }}</div><div class="lbl">товаров</div></div></div>
+          <div class="col-6"><div class="pw-stat"><div class="num">{{ stores_total }}</div><div class="lbl">магазинов</div></div></div>
+          <div class="col-6"><div class="pw-stat"><div class="num">{{ prices_total }}</div><div class="lbl">записей цен</div></div></div>
+          <div class="col-6"><div class="pw-stat"><div class="num">{{ cities_total }}</div><div class="lbl">городов</div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="mb-4">
+  <h4 class="mb-3"><i class="bi bi-grid"></i> Категории</h4>
+  <div class="row g-3">
+    {% for c in categories %}
+    <div class="col-6 col-md-3 col-lg-2">
+      <a href="/category/{{ c.slug }}" class="pw-cat d-block text-decoration-none text-center p-3 rounded-3 h-100">
+        <div class="pw-cat-icon mb-2"><i class="bi bi-{{ c.icon }}"></i></div>
+        <div class="fw-semibold">{{ c.name_ru }}</div>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="mb-4">
+  <div class="d-flex align-items-baseline justify-content-between mb-3">
+    <h4 class="m-0"><i class="bi bi-fire"></i> Выгодные товары</h4>
+    <a href="/search" class="small">Все товары →</a>
+  </div>
+  <div class="row g-3">
+    {% for r in popular %}
+    <div class="col-6 col-md-4 col-lg-3">
+      <a href="/product/{{ r.product.slug }}" class="pw-card d-block h-100 text-decoration-none">
+        {% if r.product.image_url %}
+          <div class="pw-card-img" style="background-image: url('{{ r.product.image_url }}')"></div>
+        {% else %}
+          <div class="pw-card-img pw-card-img-empty"><i class="bi bi-basket"></i></div>
+        {% endif %}
+        <div class="p-3">
+          <div class="small text-muted d-flex align-items-center justify-content-between">
+            <span>
+              {% if r.product.weight_text %}{{ r.product.weight_text }}{% if r.product.fat_text %} · {{ r.product.fat_text }}{% endif %}{% elif r.product.fat_text %}{{ r.product.fat_text }}{% else %}{{ r.product.unit }}{% endif %}
+            </span>
+            {% if r.stores_count >= 2 %}
+              <span class="badge pw-badge-cmp" title="Сравнение в {{ r.stores_count }} магазинах"><i class="bi bi-arrow-left-right"></i> {{ r.stores_count }}</span>
+            {% endif %}
+          </div>
+          {% if r.product.brand %}<div class="small fw-semibold text-muted">{{ r.product.brand }}</div>{% endif %}
+          <div class="fw-semibold pw-title">{{ r.product.name_ru }}</div>
+          <div class="d-flex align-items-baseline justify-content-between mt-2">
+            <div class="pw-price">{{ r.min_price_kgs|format_price('KGS') }}</div>
+            {% if r.max_price_kgs > r.min_price_kgs %}
+              <div class="small text-muted">до {{ r.max_price_kgs|format_price('KGS') }}</div>
+            {% endif %}
+          </div>
+          <div class="small text-muted mt-1"><i class="bi bi-geo-alt"></i> {{ r.cheapest_store }}</div>
+        </div>
+      </a>
+    </div>
+    {% endfor %}
+    {% if not popular %}
+      <div class="col-12"><div class="alert alert-info">Нет данных. Откройте <a href="/admin">админ-панель</a> и нажмите «Запустить сбор цен», чтобы спарсить свежие цены.</div></div>
+    {% endif %}
+  </div>
+</section>
+
+{% if changes.rises or changes.falls %}
+<section class="mb-4">
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <h5 class="mb-3"><i class="bi bi-arrow-up-right-circle text-danger"></i> Подорожали за 30 дней</h5>
+      <div class="list-group">
+        {% for c in changes.rises %}
+        <a href="/product/{{ c.product_slug }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+          <span>{{ c.product_name }}</span>
+          <span class="badge bg-danger">+{{ c.change_pct }}%</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <h5 class="mb-3"><i class="bi bi-arrow-down-right-circle text-success"></i> Подешевели за 30 дней</h5>
+      <div class="list-group">
+        {% for c in changes.falls %}
+        <a href="/product/{{ c.product_slug }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+          <span>{{ c.product_name }}</span>
+          <span class="badge bg-success">{{ c.change_pct }}%</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

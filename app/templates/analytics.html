@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}Аналитика · PriceWatch{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-baseline justify-content-between mb-3 flex-wrap gap-2">
+  <h1 class="m-0"><i class="bi bi-bar-chart"></i> Аналитика</h1>
+  <div class="btn-group" role="group" aria-label="Период">
+    {% for d, label in [(7, '7 дн'), (30, '30 дн'), (90, '90 дн'), (365, 'Год')] %}
+      <a class="btn btn-sm {% if period == d %}btn-primary{% else %}btn-outline-primary{% endif %}" href="/analytics?period={{ d }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+</div>
+<p class="small text-muted mb-4">Актуальные цены собираются парсерами в реальном времени. 30/90-дневная история — смоделирована от текущих цен с реалистичными флуктуациями для демонстрации графиков.</p>
+
+<!-- ============== Сводные карточки ============== -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3 col-xl-2">
+    <div class="pw-metric"><div class="pw-metric-val">{{ summary.total_prices }}</div><div class="pw-metric-lbl">записей цен</div></div>
+  </div>
+  <div class="col-6 col-md-3 col-xl-2">
+    <div class="pw-metric"><div class="pw-metric-val">{{ summary.total_products }}</div><div class="pw-metric-lbl">уникальных SKU</div></div>
+  </div>
+  <div class="col-6 col-md-3 col-xl-2">
+    <div class="pw-metric"><div class="pw-metric-val">{{ summary.total_stores }}</div><div class="pw-metric-lbl">магазинов</div></div>
+  </div>
+  <div class="col-6 col-md-3 col-xl-2">
+    <div class="pw-metric"><div class="pw-metric-val">{{ summary.total_cities }}</div><div class="pw-metric-lbl">городов</div></div>
+  </div>
+  <div class="col-6 col-md-3 col-xl-2">
+    <div class="pw-metric"><div class="pw-metric-val">{{ summary.total_countries }}</div><div class="pw-metric-lbl">стран</div></div>
+  </div>
+  <div class="col-6 col-md-3 col-xl-2">
+    <div class="pw-metric"><div class="pw-metric-val">{{ summary.avg_price_kgs }}</div><div class="pw-metric-lbl">средн. цена, сом</div></div>
+  </div>
+</div>
+
+<!-- ============== Курсы валют (НБКР) ============== -->
+<div class="pw-card p-3 mb-4">
+  <div class="d-flex align-items-baseline justify-content-between mb-2">
+    <h5 class="m-0"><i class="bi bi-currency-exchange"></i> Курсы валют к сому</h5>
+    <span class="small text-muted">
+      Источник: <a href="https://www.nbkr.kg" target="_blank">НБКР</a> · обновляется автоматически каждые 6 часов
+      {% if rates_detail and rates_detail[0].updated_at %}· последнее обновление: {{ rates_detail[0].updated_at.strftime('%d.%m.%Y %H:%M') }} UTC{% endif %}
+    </span>
+  </div>
+  <div class="row g-2">
+    {% for r in rates_detail %}
+    <div class="col-6 col-md-3 col-xl-2">
+      <div class="pw-rate">
+        <div class="small text-muted">1 {{ r.code }}</div>
+        <div class="fw-bold">{{ '%.2f' % r.rate }} сом</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- ============== Изменения цен ============== -->
+<div class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="pw-card p-3 h-100">
+      <h5 class="mb-3"><i class="bi bi-arrow-up-right-circle text-danger"></i> Подорожание за {{ period }} дн.</h5>
+      <canvas id="risesChart" height="160"></canvas>
+      <div class="list-group mt-3">
+        {% for c in changes.rises[:8] %}
+        <a href="/product/{{ c.product_slug }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2">
+          <span class="small text-truncate" style="max-width: 70%;">{{ c.product_name }}</span>
+          <span class="small"><span class="text-muted me-2">{{ c.past_avg }} → {{ c.recent_avg }}</span><span class="badge bg-danger">+{{ c.change_pct }}%</span></span>
+        </a>
+        {% else %}
+          <div class="text-muted small">Недостаточно данных для периода. Увеличьте период или запустите бэкфилл истории.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="pw-card p-3 h-100">
+      <h5 class="mb-3"><i class="bi bi-arrow-down-right-circle text-success"></i> Снижение цен за {{ period }} дн.</h5>
+      <canvas id="fallsChart" height="160"></canvas>
+      <div class="list-group mt-3">
+        {% for c in changes.falls[:8] %}
+        <a href="/product/{{ c.product_slug }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2">
+          <span class="small text-truncate" style="max-width: 70%;">{{ c.product_name }}</span>
+          <span class="small"><span class="text-muted me-2">{{ c.past_avg }} → {{ c.recent_avg }}</span><span class="badge bg-success">{{ c.change_pct }}%</span></span>
+        </a>
+        {% else %}
+          <div class="text-muted small">Недостаточно данных.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============== Сравнение стран ============== -->
+<div class="pw-card p-3 mb-4">
+  <h5 class="mb-3"><i class="bi bi-globe"></i> Средняя цена по категориям: {{ country_cmp.countries | map(attribute='flag') | join(' vs ') }}</h5>
+  <canvas id="countryCmpChart" height="100"></canvas>
+</div>
+
+<!-- ============== Продуктовая корзина ============== -->
+<div class="pw-card p-3 mb-4">
+  <h5 class="mb-3"><i class="bi bi-basket2"></i> Продуктовая корзина по городам</h5>
+  <p class="small text-muted">Самый дешёвый товар каждой категории в каждом городе — реалистичная корзина покупателя.</p>
+  {% if basket %}
+  <canvas id="basketChart" height="100"></canvas>
+  <div class="row g-3 mt-3">
+    {% for b in basket %}
+    <div class="col-md-6 col-lg-4">
+      <div class="pw-city-card p-3 rounded-3 h-100">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span style="font-size: 1.3rem;">{{ b.country_flag }}</span>
+          <div class="fw-semibold">{{ b.city_name }}</div>
+          <div class="small text-muted ms-auto">{{ b.country_name }}</div>
+        </div>
+        <div class="pw-price mb-1">{{ b.total_kgs }} сом</div>
+        <div class="small text-muted mb-2">{{ b.items_count }} категорий</div>
+        <details>
+          <summary class="small text-muted" style="cursor: pointer;">Что входит →</summary>
+          <ul class="small mt-2 mb-0" style="padding-left: 1.1rem; line-height: 1.5;">
+            {% for it in b['items'] %}
+            <li><span class="text-muted">{{ it.category }}:</span> <a href="/product/{{ it.product_slug }}">{{ it.product }}</a> — {{ it.price_kgs }} сом</li>
+            {% endfor %}
+          </ul>
+        </details>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <div class="alert alert-info mb-0">Недостаточно данных. Запустите сбор цен.</div>
+  {% endif %}
+</div>
+
+<!-- ============== Распределение по категориям ============== -->
+<div class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="pw-card p-3 h-100">
+      <h5 class="mb-3"><i class="bi bi-pie-chart"></i> Распределение SKU по категориям</h5>
+      <canvas id="categoryDoughnut" height="200"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="pw-card p-3 h-100">
+      <h5 class="mb-3"><i class="bi bi-graph-up-arrow"></i> Средняя цена в категории (сом)</h5>
+      <canvas id="categoryAvgBar" height="200"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ============== Магазины ============== -->
+<div class="pw-card p-3 mb-4">
+  <h5 class="mb-3"><i class="bi bi-shop"></i> Магазины в проекте</h5>
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead><tr>
+        <th>Магазин</th><th>Город</th>
+        <th class="text-end">SKU</th><th class="text-end">Записей цен</th>
+        <th class="text-end">Мин.</th><th class="text-end">Средн.</th><th class="text-end">Макс.</th>
+      </tr></thead>
+      <tbody>
+      {% for s in stores %}
+      <tr>
+        <td class="fw-semibold">{{ s.store_name }}</td>
+        <td>{{ s.flag }} {{ s.city }}</td>
+        <td class="text-end">{{ s.sku_count }}</td>
+        <td class="text-end">{{ s.prices_count }}</td>
+        <td class="text-end text-success">{{ s.min_kgs }}</td>
+        <td class="text-end fw-bold">{{ s.avg_kgs }}</td>
+        <td class="text-end text-danger">{{ s.max_kgs }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Общие настройки Chart.js
+Chart.defaults.font.family = "-apple-system, 'Segoe UI', Roboto, sans-serif";
+Chart.defaults.color = '#475569';
+Chart.defaults.plugins.legend.position = 'bottom';
+
+// ===== Rises/Falls =====
+const RISES = {{ changes.rises|tojson }};
+const FALLS = {{ changes.falls|tojson }};
+if (RISES && RISES.length) {
+  new Chart(document.getElementById('risesChart'), {
+    type: 'bar',
+    data: {
+      labels: RISES.slice(0, 6).map(r => truncate(r.product_name, 24)),
+      datasets: [{label: 'Изменение, %', data: RISES.slice(0, 6).map(r => r.change_pct), backgroundColor: '#dc2626', borderRadius: 6}]
+    },
+    options: {indexAxis: 'y', plugins: {legend: {display: false}}, scales: {x: {beginAtZero: true}}}
+  });
+}
+if (FALLS && FALLS.length) {
+  new Chart(document.getElementById('fallsChart'), {
+    type: 'bar',
+    data: {
+      labels: FALLS.slice(0, 6).map(r => truncate(r.product_name, 24)),
+      datasets: [{label: 'Изменение, %', data: FALLS.slice(0, 6).map(r => r.change_pct), backgroundColor: '#16a34a', borderRadius: 6}]
+    },
+    options: {indexAxis: 'y', plugins: {legend: {display: false}}, scales: {x: {max: 0}}}
+  });
+}
+
+// ===== Country comparison =====
+const CCMP = {{ country_cmp|tojson }};
+if (CCMP && CCMP.categories.length) {
+  const colors = {'KG': '#ef4444', 'RU': '#3b82f6', 'KZ': '#f59e0b'};
+  const datasets = CCMP.countries.map(c => ({
+    label: `${c.flag} ${c.name}`,
+    data: CCMP.rows.map(r => r.by_country[c.code] || 0),
+    backgroundColor: colors[c.code] || '#7c3aed',
+    borderRadius: 6,
+  }));
+  new Chart(document.getElementById('countryCmpChart'), {
+    type: 'bar',
+    data: {labels: CCMP.categories, datasets: datasets},
+    options: {responsive: true, scales: {y: {beginAtZero: true, title: {display: true, text: 'сом'}}}}
+  });
+}
+
+// ===== Basket =====
+const BASKET = {{ basket|tojson }};
+if (BASKET && BASKET.length) {
+  new Chart(document.getElementById('basketChart'), {
+    type: 'bar',
+    data: {
+      labels: BASKET.map(b => `${b.country_flag} ${b.city_name}`),
+      datasets: [{
+        label: 'Корзина, сом',
+        data: BASKET.map(b => b.total_kgs),
+        backgroundColor: BASKET.map(b => b.country_code === 'KG' ? '#ef4444' : (b.country_code === 'RU' ? '#3b82f6' : '#f59e0b')),
+        borderRadius: 6,
+      }]
+    },
+    options: {plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true, title: {display: true, text: 'сом'}}}}
+  });
+}
+
+// ===== Category doughnut + bar =====
+const CAT = {{ cat_dist|tojson }};
+const palette = ['#7c3aed','#ef4444','#3b82f6','#16a34a','#f59e0b','#06b6d4','#d946ef','#64748b','#14b8a6','#eab308'];
+if (CAT && CAT.length) {
+  new Chart(document.getElementById('categoryDoughnut'), {
+    type: 'doughnut',
+    data: {
+      labels: CAT.map(c => c.category),
+      datasets: [{data: CAT.map(c => c.count), backgroundColor: palette}]
+    },
+    options: {plugins: {legend: {position: 'right', labels: {boxWidth: 12}}}, cutout: '55%'}
+  });
+  new Chart(document.getElementById('categoryAvgBar'), {
+    type: 'bar',
+    data: {
+      labels: CAT.map(c => c.category),
+      datasets: [{label: 'Средняя цена, сом', data: CAT.map(c => c.avg_kgs), backgroundColor: palette, borderRadius: 6}]
+    },
+    options: {indexAxis: 'y', plugins: {legend: {display: false}}, scales: {x: {beginAtZero: true}}}
+  });
+}
+
+function truncate(s, n) { return s && s.length > n ? s.substring(0, n - 1) + '…' : s; }
+</script>
+{% endblock %}

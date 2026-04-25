@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name_ru }} · PriceWatch{% endblock %}
+
+{% block content %}
+<nav class="small mb-3">
+  <a href="/">Главная</a> / <a href="/category/{{ product.category.slug }}">{{ product.category.name_ru }}</a> / {{ product.name_ru }}
+</nav>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="pw-product-img mb-3">
+      {% if product.image_url %}
+        <img src="{{ product.image_url }}" alt="{{ product.name_ru }}" class="img-fluid">
+      {% else %}
+        <div class="d-flex align-items-center justify-content-center h-100"><i class="bi bi-basket display-1 text-muted"></i></div>
+      {% endif %}
+    </div>
+    <div class="pw-stats-box p-3 rounded-3">
+      <h6 class="text-muted small mb-2">Статистика по рынку (за 7 дней)</h6>
+      <div class="row g-2 text-center">
+        <div class="col-4"><div class="small text-muted">Мин</div><div class="fw-bold text-success">{{ stats.min_price_kgs|format_price('KGS') }}</div></div>
+        <div class="col-4"><div class="small text-muted">Средн</div><div class="fw-bold">{{ stats.avg_price_kgs|format_price('KGS') }}</div></div>
+        <div class="col-4"><div class="small text-muted">Макс</div><div class="fw-bold text-danger">{{ stats.max_price_kgs|format_price('KGS') }}</div></div>
+      </div>
+      <hr>
+      <div class="small text-muted">Самое выгодное предложение:</div>
+      <div class="fw-semibold">{{ stats.cheapest_store }} <span class="text-muted">· {{ stats.cheapest_city }}</span></div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <h1 class="mb-1">{{ product.name_ru }}</h1>
+    <div class="pw-spec-row small mb-3">
+      {% if product.brand %}<span class="pw-spec"><i class="bi bi-bookmark"></i> Бренд: <strong>{{ product.brand }}</strong></span>{% endif %}
+      {% if product.weight_text %}<span class="pw-spec"><i class="bi bi-box"></i> Вес/объём: <strong>{{ product.weight_text }}</strong></span>{% endif %}
+      {% if product.fat_text %}<span class="pw-spec"><i class="bi bi-droplet"></i> Жирность: <strong>{{ product.fat_text }}</strong></span>{% endif %}
+      <span class="pw-spec"><i class="bi bi-tag"></i> Категория: <strong>{{ product.category.name_ru }}</strong></span>
+    </div>
+
+    <h5 class="mt-4 mb-3"><i class="bi bi-tag"></i> Предложения в магазинах</h5>
+    {% if offers %}
+    <div class="table-responsive">
+      <table class="table pw-offers align-middle">
+        <thead><tr><th>Магазин</th><th>Город</th><th class="text-end">Цена</th><th class="text-end">В сомах</th><th></th></tr></thead>
+        <tbody>
+        {% for o in offers %}
+        <tr {% if loop.first %}class="pw-best"{% endif %}>
+          <td>
+            <div class="fw-semibold">{{ o.store_name }}</div>
+            {% if loop.first %}<span class="badge bg-success">Самая низкая цена</span>{% endif %}
+          </td>
+          <td>{{ o.country_flag }} {{ o.city_name }}</td>
+          <td class="text-end">{{ o.price_original|format_price(o.currency) }}</td>
+          <td class="text-end fw-bold">{{ o.price_kgs|format_price('KGS') }}</td>
+          <td class="text-end">
+            {% if o.source_url %}
+              <a href="{{ o.source_url }}" target="_blank" class="btn btn-sm btn-outline-primary">Перейти <i class="bi bi-box-arrow-up-right"></i></a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="alert alert-info">Нет данных о ценах на этот товар. Запустите сбор цен в <a href="/admin">админ-панели</a>.</div>
+    {% endif %}
+
+    {% if cities_cmp %}
+    <h5 class="mt-4 mb-3"><i class="bi bi-geo-alt"></i> Сравнение по городам</h5>
+    <div class="row g-2">
+      {% for c in cities_cmp %}
+      <div class="col-md-6 col-lg-4">
+        <div class="pw-city-card p-3 rounded-3">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span>{{ c.country_flag }}</span>
+            <div class="fw-semibold">{{ c.city_name }}</div>
+            <div class="small text-muted ms-auto">{{ c.country_name }}</div>
+          </div>
+          <div class="d-flex align-items-baseline justify-content-between">
+            <div class="fw-bold text-success">{{ c.avg_price_kgs|format_price('KGS') }}</div>
+            <div class="small text-muted">{{ c.offers }} предл.</div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if similar %}
+    <h5 class="mt-4 mb-3"><i class="bi bi-grid-3x3"></i> Похожие товары в категории</h5>
+    <p class="text-muted small">Товары других брендов или с другим весом — для сравнительного выбора.</p>
+    <div class="row g-2 mb-4">
+      {% for sp in similar %}
+      <div class="col-md-6 col-lg-4 col-xl-3">
+        <a href="/product/{{ sp.slug }}" class="pw-card d-block p-2 text-decoration-none h-100">
+          {% if sp.image_url %}<div class="pw-similar-img" style="background-image:url('{{ sp.image_url }}')"></div>{% endif %}
+          <div class="small text-muted mt-1">
+            {% if sp.weight_text %}{{ sp.weight_text }}{% endif %}{% if sp.fat_text %} · {{ sp.fat_text }}{% endif %}
+          </div>
+          {% if sp.brand %}<div class="small fw-semibold">{{ sp.brand }}</div>{% endif %}
+          <div class="small pw-title">{{ sp.name_ru }}</div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if history|length >= 2 %}
+    <h5 class="mt-4 mb-3"><i class="bi bi-graph-up"></i> История цен (средняя по рынку)</h5>
+    <div class="pw-chart-wrap p-3 rounded-3">
+      <canvas id="historyChart" height="120"></canvas>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const HISTORY = {{ history|tojson }};
+if (HISTORY && HISTORY.length >= 2) {
+  const ctx = document.getElementById('historyChart');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: HISTORY.map(p => p.date),
+      datasets: [
+        {
+          label: 'Средняя, сом',
+          data: HISTORY.map(p => p.avg_price_kgs),
+          borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.12)',
+          borderWidth: 2, fill: true, tension: 0.25, pointRadius: 2,
+        },
+        {
+          label: 'Мин', data: HISTORY.map(p => p.min_price_kgs),
+          borderColor: '#16a34a', borderWidth: 1.5, borderDash: [5,5], pointRadius: 0, fill: false,
+        },
+        {
+          label: 'Макс', data: HISTORY.map(p => p.max_price_kgs),
+          borderColor: '#dc2626', borderWidth: 1.5, borderDash: [5,5], pointRadius: 0, fill: false,
+        },
+      ]
+    },
+    options: {
+      responsive: true, interaction: {mode: 'index', intersect: false},
+      plugins: {legend: {position: 'bottom'}},
+      scales: {y: {beginAtZero: false}}
+    }
+  });
+}
+</script>
+{% endblock %}

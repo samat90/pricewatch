@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Поиск: {{ q or category.name_ru if category else 'все товары' }} · PriceWatch{% endblock %}
+
+{% block scripts %}
+{% if q and live_triggered %}
+<script>
+  // Polling: следим за live-поиском для текущего запроса.
+  const LIVE_Q = {{ q|tojson }};
+  const initialCount = {{ results|length }};
+  let tries = 0;
+  const iv = setInterval(async () => {
+    tries += 1;
+    try {
+      const r = await fetch('/api/status?query=' + encodeURIComponent(LIVE_Q), { cache: 'no-store' });
+      const s = await r.json();
+      const live = s.live_for_query;
+      if (live && !live.running) {
+        clearInterval(iv);
+        // Если добавились цены — перезагружаем страницу через небольшую задержку
+        if (live.saved > 0) {
+          const el = document.getElementById('pw-live-search');
+          if (el) el.innerHTML = '<i class="bi bi-check-circle text-success"></i> Найдено и добавлено ' + live.saved + ' новых цен. Обновляю…';
+          setTimeout(() => location.reload(), 1200);
+        } else {
+          const el = document.getElementById('pw-live-search');
+          if (el) el.classList.add('d-none');
+        }
+      }
+    } catch (e) {}
+    if (tries > 40) clearInterval(iv);  // ~80 секунд максимум
+  }, 2000);
+</script>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <aside class="col-lg-3">
+    <div class="pw-filters p-3 rounded-3 sticky-top">
+      <h6 class="mb-3"><i class="bi bi-funnel"></i> Фильтры</h6>
+      <form method="get" action="/search">
+        <div class="mb-3">
+          <label class="form-label small text-muted">Запрос</label>
+          <input type="search" name="q" class="form-control" value="{{ q }}" placeholder="название товара">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted">Страна</label>
+          <select name="country_id" class="form-select">
+            <option value="">Все страны</option>
+            {% for c in countries %}<option value="{{ c.id }}" {% if selected_country_id == c.id %}selected{% endif %}>{{ c.flag }} {{ c.name_ru }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted">Город</label>
+          <select name="city_id" class="form-select">
+            <option value="">Все города</option>
+            {% for c in cities %}<option value="{{ c.id }}" {% if selected_city_id == c.id %}selected{% endif %}>{{ c.name_ru }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted">Категория</label>
+          <select name="category_id" class="form-select">
+            <option value="">Все категории</option>
+            {% for c in categories %}<option value="{{ c.id }}" {% if selected_category_id == c.id %}selected{% endif %}>{{ c.name_ru }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary w-100"><i class="bi bi-search"></i> Применить</button>
+      </form>
+    </div>
+  </aside>
+
+  <div class="col-lg-9">
+    <div class="d-flex align-items-baseline justify-content-between mb-3">
+      <h3 class="m-0">
+        {% if q %}Результаты по запросу «{{ q }}»{% elif category %}{{ category.name_ru }}{% else %}Все товары{% endif %}
+      </h3>
+      <span class="text-muted">{{ results|length }} товаров</span>
+    </div>
+
+    {% if q and live_triggered %}
+    <div id="pw-live-search" class="alert alert-info d-flex align-items-center gap-2 py-2">
+      <span class="spinner-border spinner-border-sm"></span>
+      <span>Ищем свежие цены на «<strong>{{ q }}</strong>» у Глобуса в реальном времени…</span>
+    </div>
+    {% endif %}
+
+    {% if results %}
+    <div class="row g-3">
+      {% for r in results %}
+      <div class="col-md-6 col-xl-4">
+        <a href="/product/{{ r.product.slug }}" class="pw-card d-block h-100 text-decoration-none">
+          {% if r.product.image_url %}
+            <div class="pw-card-img" style="background-image: url('{{ r.product.image_url }}')"></div>
+          {% else %}
+            <div class="pw-card-img pw-card-img-empty"><i class="bi bi-basket"></i></div>
+          {% endif %}
+          <div class="p-3">
+            <div class="small text-muted d-flex align-items-center justify-content-between">
+              <span>
+                {% if r.product.weight_text %}{{ r.product.weight_text }}{% endif %}{% if r.product.fat_text %} · {{ r.product.fat_text }}{% endif %}
+              </span>
+              {% if r.stores_count >= 2 %}
+                <span class="badge pw-badge-cmp" title="Один SKU в {{ r.stores_count }} магазинах"><i class="bi bi-arrow-left-right"></i> {{ r.stores_count }}</span>
+              {% endif %}
+            </div>
+            {% if r.product.brand %}<div class="small fw-semibold text-muted">{{ r.product.brand }}</div>{% endif %}
+            <div class="fw-semibold pw-title">{{ r.product.name_ru }}</div>
+            <div class="d-flex align-items-baseline justify-content-between mt-2">
+              <div class="pw-price">{{ r.min_price_kgs|format_price('KGS') }}</div>
+              {% if r.max_price_kgs > r.min_price_kgs %}
+                <div class="small text-muted">до {{ r.max_price_kgs|format_price('KGS') }}</div>
+              {% endif %}
+            </div>
+            <div class="small text-muted mt-1"><i class="bi bi-geo-alt"></i> {{ r.cheapest_flag }} {{ r.cheapest_store }}</div>
+          </div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-warning">
+      <i class="bi bi-search"></i> Ничего не найдено. Попробуйте изменить запрос или открыть <a href="/admin">админ-панель</a>, чтобы запустить сбор цен.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
